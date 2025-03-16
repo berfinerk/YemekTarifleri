@@ -1,6 +1,5 @@
-package com.example.yemektarifleri
+package com.example.yemektarifleri.view
 
-import android.app.DirectAction
 import android.os.Bundle
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater

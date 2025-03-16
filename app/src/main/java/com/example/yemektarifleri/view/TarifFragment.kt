@@ -1,4 +1,4 @@
-package com.example.yemektarifleri
+package com.example.yemektarifleri.view
 
 import android.Manifest
 import android.content.Intent
@@ -20,7 +20,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.yemektarifleri.databinding.FragmentTarifBinding
+import com.example.yemektarifleri.model.Tarif
 import com.google.android.material.snackbar.Snackbar
+import java.io.ByteArrayOutputStream
 
 class TarifFragment : Fragment() {
     private var _binding: FragmentTarifBinding? = null
@@ -68,6 +70,17 @@ class TarifFragment : Fragment() {
 
     fun kaydet(view: View) {
         // Kaydetme işlemleri burada yapılacak
+        val isim = binding.isimText.text.toString()
+        val malzeme =binding.malzemeText.text.toString()
+
+        if (secilenBitmap !=null){
+            val kucukBitmap = kucukBitmapOlustur(secilenBitmap!!,300)
+            val outputStream=ByteArrayOutputStream()
+            kucukBitmap.compress(Bitmap.CompressFormat.PNG,50,outputStream)
+            val byteDizisi = outputStream.toByteArray()
+
+            val tarif = Tarif(isim,malzeme,byteDizisi)
+        }
     }
 
     fun sil(view: View) {
@@ -147,8 +160,30 @@ class TarifFragment : Fragment() {
         }
     }
 
+    private fun kucukBitmapOlustur(kullanicininSectigiBitmap: Bitmap,maximumBoyut : Int) : Bitmap{
+        var width = kullanicininSectigiBitmap.width
+        var height = kullanicininSectigiBitmap.height
+
+        val bitmapOrani : Double = width.toDouble() / height.toDouble()
+
+        if (bitmapOrani >1 ){
+            //gorsel yatay
+            width =maximumBoyut
+            val kisaltilmisYukseklik = width / bitmapOrani
+            height =kisaltilmisYukseklik.toInt()
+        }else{
+            //gorsel dikey
+            height =maximumBoyut
+            val kisaltilmisGenislik = height* bitmapOrani
+            width =kisaltilmisGenislik.toInt()
+        }
+
+
+        return Bitmap.createScaledBitmap(kullanicininSectigiBitmap,width,height,true)
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
     }
-}  izin istemiyor reddedince izin verilmedi yazısı çıkıyor sadece
+}
