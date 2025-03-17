@@ -1,11 +1,14 @@
 package com.example.yemektarifleri.view
 
 import android.Manifest
+import android.app.DirectAction
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Binder
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -19,9 +22,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.navigation.Navigation
+import androidx.room.Room
+import androidx.room.RoomDatabase
 import com.example.yemektarifleri.databinding.FragmentTarifBinding
 import com.example.yemektarifleri.model.Tarif
+import com.example.yemektarifleri.room.TarifDAO
+import com.example.yemektarifleri.roomdb.TarifDataBase
 import com.google.android.material.snackbar.Snackbar
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import io.reactivex.rxjava3.disposables.CompositeDisposable
+import io.reactivex.rxjava3.schedulers.Schedulers
 import java.io.ByteArrayOutputStream
 
 class TarifFragment : Fragment() {
@@ -32,10 +43,19 @@ class TarifFragment : Fragment() {
     private lateinit var activityResultLauncher: ActivityResultLauncher<Intent>  // Galeriye gitmek için
     private var secilenGorsel: Uri? = null // Seçilen görselin URI'sini tutar
     private var secilenBitmap: Bitmap? = null // Seçilen görselin bitmap halini tutar
+    private var mDisposable = CompositeDisposable()
+    private var secilenTarif :Tarif? =null
+
+    private lateinit var db : TarifDataBase
+    private lateinit var tarifDao : TarifDAO
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         registerLauncher() // İzin ve galeriye gitme işlemleri için register işlemi
+
+        db = Room.databaseBuilder(requireContext(),TarifDataBase::class.java, name = "Tarifler")
+            .build()
+        tarifDao=db.TarifDao()
     }
 
     override fun onCreateView(
@@ -58,14 +78,30 @@ class TarifFragment : Fragment() {
 
             if (bilgi == "yeni") {
                 // Yeni tarif ekleniyor
+                secilenTarif=null
                 binding.silBtn.isEnabled = false
                 binding.kaydetBtn.isEnabled = true
             } else {
                 // Önceden eklenmiş bir tarif gösteriliyor
                 binding.silBtn.isEnabled = true
                 binding.kaydetBtn.isEnabled = false
+                val id =TarifFragmentArgs.fromBundle(it).id
+
+                mDisposable.add(
+                    tarifDao.findById(id)
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .subscribe(this::handleResponse)
+                )
             }
         }
+    }
+    private fun handleResponse(tarif: Tarif){
+        val bitmap = BitmapFactory.decodeByteArray(tarif.gorsel,0,tarif.gorsel.size)
+        binding.imageView.setImageBitmap(bitmap)
+        binding.isimText.setText(tarif.isim)
+        binding.malzemeText.setText(tarif.malzeme)
+        secilenTarif=tarif
     }
 
     fun kaydet(view: View) {
@@ -73,18 +109,40 @@ class TarifFragment : Fragment() {
         val isim = binding.isimText.text.toString()
         val malzeme =binding.malzemeText.text.toString()
 
-        if (secilenBitmap !=null){
-            val kucukBitmap = kucukBitmapOlustur(secilenBitmap!!,300)
-            val outputStream=ByteArrayOutputStream()
-            kucukBitmap.compress(Bitmap.CompressFormat.PNG,50,outputStream)
+        if (secilenBitmap !=null) {
+            val kucukBitmap = kucukBitmapOlustur(secilenBitmap!!, 300)
+            val outputStream = ByteArrayOutputStream()
+            kucukBitmap.compress(Bitmap.CompressFormat.PNG, 50, outputStream)
             val byteDizisi = outputStream.toByteArray()
 
-            val tarif = Tarif(isim,malzeme,byteDizisi)
+            val tarif = Tarif(isim, malzeme, byteDizisi)
+
+            //RxJava
+            mDisposable.add(
+                tarifDao.insert(tarif)
+                    .subscribeOn(Schedulers.io())
+                    .observeOn(AndroidSchedulers.mainThread())
+                    .subscribe(this::handleResponseForInsert)
+            )
         }
+    }
+    private fun handleResponseForInsert(){
+        //bir önceki fragment a dön
+        val action = TarifFragmentDirections.actionTarifFragmentToListeFragment()
+        Navigation.findNavController(requireView()).navigate(action)
+
     }
 
     fun sil(view: View) {
-        // Silme işlemleri burada yapılacak
+        if (secilenTarif != null){
+            mDisposable.add(
+                tarifDao.delete(tarif = secilenTarif!!)
+                    .subscribeOn(Schedulers.io())
+                    .observeOn(AndroidSchedulers.mainThread())
+                    .subscribe(this::handleResponseForInsert)
+            )
+        }
+
     }
 
     fun gorselsec(view: View) {
@@ -185,5 +243,6 @@ class TarifFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+        mDisposable.clear()
     }
 }
